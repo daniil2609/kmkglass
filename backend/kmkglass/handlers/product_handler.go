@@ -1,0 +1,393 @@
+package handlers
+
+import (
+	"encoding/json"
+	"kmkglass/database"
+	"kmkglass/models"
+	"log"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis/v8"
+)
+
+func GetProducts(c *gin.Context) {
+	// Получаем параметры пагинации
+	lastID := c.DefaultQuery("lastId", "0")
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
+	cacheKey := "products_" + lastID + "_" + strconv.Itoa(pageSize)
+
+	// Проверяем, есть ли кэшированные данные в Redis
+	cachedProducts, err := database.RedisClient.Get(database.Ctx, cacheKey).Result()
+	if err == redis.Nil {
+		// Если данных нет, запрашиваем их из базы данных
+		rows, err := database.DB.Query("SELECT * FROM products p WHERE p.idproducts > ? ORDER BY p.idproducts LIMIT ?;", lastID, pageSize)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		var products []models.Product
+		for rows.Next() {
+			var product models.Product
+			if err := rows.Scan(&product.Idproducts,
+				&product.Price,
+				&product.Name,
+				&product.Article,
+				&product.Length,
+				&product.Photo,
+				&product.Width,
+				&product.Amount,
+				&product.Brands_name,
+				&product.Models_name,
+				&product.Year_model_name,
+				&product.Glass_types_name,
+				&product.Glass_options_name); err != nil {
+
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			products = append(products, product)
+		}
+
+		// Кэшируем данные в Redis на 10 минут
+		productsJSON, _ := json.Marshal(products)
+		database.RedisClient.Set(database.Ctx, cacheKey, productsJSON, 10*time.Minute).Err()
+
+		c.JSON(http.StatusOK, products)
+		log.Println("MySQL Data")
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	} else {
+		// Если данные есть в кэше, используем их
+		var products []models.Product
+		json.Unmarshal([]byte(cachedProducts), &products)
+		c.JSON(http.StatusOK, products)
+		log.Println("Redis Data")
+	}
+}
+
+func GetYearsModel(c *gin.Context) {
+	// Получаем параметры пагинации
+	car_model := c.DefaultQuery("model", "0")
+	cacheKey := "years_" + car_model
+
+	// Проверяем, есть ли кэшированные данные в Redis
+	cachedYears, err := database.RedisClient.Get(database.Ctx, cacheKey).Result()
+	if err == redis.Nil {
+		// Если данных нет, запрашиваем их из базы данных
+		rows, err := database.DB.Query(`SELECT *
+										FROM kmkglass.year_model
+										WHERE model_name = ?;`, car_model)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		var years []models.Year_model
+		for rows.Next() {
+			var year models.Year_model
+			if err := rows.Scan(&year.Idyear_model,
+				&year.Name,
+				&year.Model_name); err != nil {
+
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			years = append(years, year)
+		}
+
+		// Кэшируем данные в Redis на 10 минут
+		productsJSON, _ := json.Marshal(years)
+		database.RedisClient.Set(database.Ctx, cacheKey, productsJSON, 10*time.Minute).Err()
+
+		c.JSON(http.StatusOK, years)
+		log.Println("MySQL Data")
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	} else {
+		// Если данные есть в кэше, используем их
+		var years []models.Year_model
+		json.Unmarshal([]byte(cachedYears), &years)
+		c.JSON(http.StatusOK, years)
+		log.Println("Redis Data")
+	}
+}
+
+func GetBrands(c *gin.Context) {
+	// Получаем параметры пагинации
+	cacheKey := "brands"
+	// Проверяем, есть ли кэшированные данные в Redis
+	cachedBrands, err := database.RedisClient.Get(database.Ctx, cacheKey).Result()
+	if err == redis.Nil {
+		// Если данных нет, запрашиваем их из базы данных
+		rows, err := database.DB.Query(`SELECT *
+										FROM kmkglass.brands b;`)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		var brands []models.Brands
+		for rows.Next() {
+			var brand models.Brands
+			if err := rows.Scan(&brand.Idbrands, &brand.Name); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			brands = append(brands, brand)
+		}
+
+		// Кэшируем данные в Redis на 10 минут
+		productsJSON, _ := json.Marshal(brands)
+		database.RedisClient.Set(database.Ctx, cacheKey, productsJSON, 10*time.Minute).Err()
+
+		c.JSON(http.StatusOK, brands)
+		log.Println("MySQL Data")
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	} else {
+		// Если данные есть в кэше, используем их
+		var brands []models.Year_model
+		json.Unmarshal([]byte(cachedBrands), &brands)
+		c.JSON(http.StatusOK, brands)
+		log.Println("Redis Data")
+	}
+}
+
+func GetModelsBrand(c *gin.Context) {
+	// Получаем параметры пагинации
+	car_brand := c.DefaultQuery("brand", "0")
+	cacheKey := "models_" + car_brand
+
+	// Проверяем, есть ли кэшированные данные в Redis
+	cachedModels_car, err := database.RedisClient.Get(database.Ctx, cacheKey).Result()
+	if err == redis.Nil {
+		// Если данных нет, запрашиваем их из базы данных
+		rows, err := database.DB.Query(`SELECT *
+										FROM kmkglass.models
+										WHERE brand_name = ?;`, car_brand)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		var models_car []models.Models
+		for rows.Next() {
+			var model_car models.Models
+			if err := rows.Scan(&model_car.Idmodels,
+				&model_car.Name,
+				&model_car.Brand_name); err != nil {
+
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			models_car = append(models_car, model_car)
+		}
+
+		// Кэшируем данные в Redis на 10 минут
+		productsJSON, _ := json.Marshal(models_car)
+		database.RedisClient.Set(database.Ctx, cacheKey, productsJSON, 10*time.Minute).Err()
+
+		c.JSON(http.StatusOK, models_car)
+		log.Println("MySQL Data")
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	} else {
+		// Если данные есть в кэше, используем их
+		var models_car []models.Year_model
+		json.Unmarshal([]byte(cachedModels_car), &models_car)
+		c.JSON(http.StatusOK, models_car)
+		log.Println("Redis Data")
+	}
+}
+
+func GetGlassOptionsGlasType(c *gin.Context) {
+	// Получаем параметры пагинации
+	car_glasstype := c.DefaultQuery("glasstype", "0")
+	cacheKey := "glassoptions_" + car_glasstype
+
+	// Проверяем, есть ли кэшированные данные в Redis
+	cachedCar_glassoptions, err := database.RedisClient.Get(database.Ctx, cacheKey).Result()
+	if err == redis.Nil {
+		// Если данных нет, запрашиваем их из базы данных
+		rows, err := database.DB.Query(`SELECT *
+										FROM kmkglass.glass_options
+										WHERE glass_type_name = ?;`, car_glasstype)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		var glass_options []models.Glass_options
+		for rows.Next() {
+			var glass_option models.Glass_options
+			if err := rows.Scan(&glass_option.Idglass_options,
+				&glass_option.Name,
+				&glass_option.Glass_type_name); err != nil {
+
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			glass_options = append(glass_options, glass_option)
+		}
+
+		// Кэшируем данные в Redis на 10 минут
+		productsJSON, _ := json.Marshal(glass_options)
+		database.RedisClient.Set(database.Ctx, cacheKey, productsJSON, 10*time.Minute).Err()
+
+		c.JSON(http.StatusOK, glass_options)
+		log.Println("MySQL Data")
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	} else {
+		// Если данные есть в кэше, используем их
+		var glass_options []models.Year_model
+		json.Unmarshal([]byte(cachedCar_glassoptions), &glass_options)
+		c.JSON(http.StatusOK, glass_options)
+		log.Println("Redis Data")
+	}
+}
+
+func GetGlassTypes(c *gin.Context) {
+	// Получаем параметры пагинации
+	cacheKey := "glasstypes"
+	// Проверяем, есть ли кэшированные данные в Redis
+	cachedGlasstypes, err := database.RedisClient.Get(database.Ctx, cacheKey).Result()
+	if err == redis.Nil {
+		// Если данных нет, запрашиваем их из базы данных
+		rows, err := database.DB.Query(`SELECT *
+										FROM kmkglass.glass_types;`)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		var glasstypes []models.Glass_types
+		for rows.Next() {
+			var glasstype models.Glass_types
+			if err := rows.Scan(&glasstype.Idglass_types, &glasstype.Name); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			glasstypes = append(glasstypes, glasstype)
+		}
+
+		// Кэшируем данные в Redis на 10 минут
+		productsJSON, _ := json.Marshal(glasstypes)
+		database.RedisClient.Set(database.Ctx, cacheKey, productsJSON, 10*time.Minute).Err()
+
+		c.JSON(http.StatusOK, glasstypes)
+		log.Println("MySQL Data")
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	} else {
+		// Если данные есть в кэше, используем их
+		var glasstypes []models.Year_model
+		json.Unmarshal([]byte(cachedGlasstypes), &glasstypes)
+		c.JSON(http.StatusOK, glasstypes)
+		log.Println("Redis Data")
+	}
+}
+
+// brands_name - обязательный, хотя бы один
+func GetFilterProducts(c *gin.Context) {
+	// Получаем параметры пагинации
+	lastID := c.DefaultQuery("lastId", "0")
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
+
+	brandName := c.DefaultQuery("brandName", "")
+	modelName := c.DefaultQuery("modelName", "")
+	yearModelName := c.DefaultQuery("yearModelName", "")
+	glassTypeName := c.DefaultQuery("glassTypeName", "")
+	glassOptionName := c.DefaultQuery("glassOptionName", "")
+
+	cacheKey := "products_" + brandName + "_" + modelName + "_" + yearModelName + "_" + glassTypeName + "_" + glassOptionName + "_" + lastID + "_" + strconv.Itoa(pageSize)
+	// Проверяем, есть ли кэшированные данные в Redis
+	cachedProducts, err := database.RedisClient.Get(database.Ctx, cacheKey).Result()
+	if err == redis.Nil {
+		// Если данных нет, запрашиваем их из базы данных
+		// Сборка запроса
+		query := `
+			SELECT p.*
+			FROM products p
+			WHERE`
+		var args []interface{}
+
+		if brandName != "" {
+			query += " p.brands_name = ?"
+			args = append(args, brandName)
+		}
+		if modelName != "" {
+			query += " AND p.models_name = ?"
+			args = append(args, modelName)
+		}
+		if yearModelName != "" {
+			query += " AND p.year_model_name = ?"
+			args = append(args, yearModelName)
+		}
+		if glassTypeName != "" {
+			query += " AND p.glass_types_name = ?"
+			args = append(args, glassTypeName)
+		}
+		if glassOptionName != "" {
+			query += " AND p.glass_options_name = ?"
+			args = append(args, glassOptionName)
+		}
+		query += " AND p.idproducts > ? ORDER BY p.idproducts LIMIT ?;"
+		args = append(args, lastID, pageSize)
+		// Выполнение запроса
+		rows, err := database.DB.Query(query, args...)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		var products []models.Product
+		for rows.Next() {
+			var product models.Product
+			if err := rows.Scan(&product.Idproducts,
+				&product.Price,
+				&product.Name,
+				&product.Article,
+				&product.Length,
+				&product.Photo,
+				&product.Width,
+				&product.Amount,
+				&product.Brands_name,
+				&product.Models_name,
+				&product.Year_model_name,
+				&product.Glass_types_name,
+				&product.Glass_options_name); err != nil {
+
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			products = append(products, product)
+		}
+
+		// Кэшируем данные в Redis на 10 минут
+		productsJSON, _ := json.Marshal(products)
+		database.RedisClient.Set(database.Ctx, cacheKey, productsJSON, 10*time.Minute).Err()
+
+		c.JSON(http.StatusOK, products)
+		log.Println("MySQL Data")
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	} else {
+		// Если данные есть в кэше, используем их
+		var products []models.Product
+		json.Unmarshal([]byte(cachedProducts), &products)
+		c.JSON(http.StatusOK, products)
+		log.Println("Redis Data")
+	}
+}

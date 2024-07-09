@@ -19,8 +19,8 @@ var db *sql.DB
 var redisClient *redis.Client
 
 type Products struct {
-	IdProducts    int
-	Price         int
+	idproducts int
+	/*Price         int
 	Name          string
 	Year          string
 	Article       string
@@ -32,7 +32,7 @@ type Products struct {
 	InStock       bool
 	Amount        int
 	IdTypeProduct int
-	IdOptions     int
+	IdOptions     int*/
 }
 
 func initDB() {
@@ -76,13 +76,20 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 	cachedResult, err := redisClient.Get(ctx, query+string(limit)+string(offset)).Result()
 	if err == redis.Nil {
-		sqlQuery := "SELECT * FROM products WHERE brand LIKE ? LIMIT ? OFFSET ?"
+		sqlQuery := `SELECT p.idproducts
+					FROM products p
+					JOIN models m ON p.models_id = m.idmodels
+					JOIN year_model ym ON p.year_model_id = ym.idyear_model
+					WHERE m.name = 'Golf' AND ym.name = '2023' LIMIT 15 OFFSET 1;`
+		/*``*/
+		//"SELECT * FROM products WHERE brand LIKE ? LIMIT ? OFFSET ?"
 		/*`SELECT *
 		FROM products
 		JOIN typeproduct ON products.idTypeProduct = typeproduct.idTypeProduct
 		WHERE typeproduct.name LIKE ? LIMIT ? OFFSET ?`*/
 		//
-		rows, err := db.Query(sqlQuery, "%"+query+"%", limit, offset)
+		query = "Golf"
+		rows, err := db.Query(sqlQuery /*, "%"+query+"%" , limit, offset*/)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Ошибка запроса к MySQL: %v", err), http.StatusInternalServerError)
 			return
@@ -92,12 +99,13 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 		var results []Products
 		for rows.Next() {
 			var row Products
-			if err := rows.Scan(&row.IdProducts, &row.Price, &row.Name, &row.Year, &row.Article, &row.Brand, &row.Model, &row.Length, &row.Photo, &row.Width, &row.InStock, &row.Amount, &row.IdTypeProduct, &row.IdOptions); err != nil {
+			if err := rows.Scan(&row.idproducts); err != nil {
 				http.Error(w, fmt.Sprintf("Ошибка сканирования полученных из MySQL данных: %v", err), http.StatusInternalServerError)
 				return
 			}
 			results = append(results, row)
 		}
+		fmt.Println(results)
 
 		if err := rows.Err(); err != nil {
 			http.Error(w, fmt.Sprintf("Ошибка итерации строки: %v", err), http.StatusInternalServerError)
