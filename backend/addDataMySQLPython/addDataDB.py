@@ -13,7 +13,8 @@ import time
 from PIL import Image, ImageDraw
 import io
 import random
-
+from minio import Minio
+from minio.error import S3Error
 
 
 car_models = [
@@ -145,28 +146,41 @@ num_rows_optionsproducts = len(glass_options_list)
 num_rows_brands = len(car_brands)
 num_rows_models = len(car_models)
 num_rows_year_model = len(year_ranges)
-number_of_entries_for_the_commit = 1000
+number_of_entries_for_the_commit = 10000
 
-# Настройте подключение к базе данных MySQL
+# Настройка подключение к базе данных MySQL
 connection = mysql.connector.connect(
     host="localhost",
+    port=3306,
     user="root",
     password="123437",
     database="kmkglass"
 )
 cursor = connection.cursor()
 
+# Настройка MinIO клиента
+minio_client = Minio(
+    'localhost:9000',
+    access_key='root',
+    secret_key='123437123437',
+    secure=False
+)
+
+# Убедимся, что ведро существует
+bucket_name = 'kmkglass-photo-bucket'
+if not minio_client.bucket_exists(bucket_name):
+    minio_client.make_bucket(bucket_name)
+    
 # Создайте объект Faker
 fake = Faker()
 
 # Функция для генерации случайного изображения
-def generate_image():
-    width, height = 350, 200
-    image = Image.new('RGB', (width, height), (255, 255, 255))
+def generate_image(width, height):
+    image = Image.new('RGB', (width, height), (random.randint(0, 254), random.randint(0, 254), random.randint(0, 254)))
     draw = ImageDraw.Draw(image)
     
     # Генерация случайного текста и рисование на изображении
-    text = fake.text(max_nb_chars=500)
+    text = fake.text(max_nb_chars=50)
     draw.text((10, 10), text, fill=(0, 0, 0))
     
     # Сохранение изображения в бинарный формат
@@ -175,11 +189,41 @@ def generate_image():
     img_byte_arr = img_byte_arr.getvalue()
     return img_byte_arr
 
+# Сохранение фотографии в MinIO
+def upload_photo_to_minio(photo, file_name):
+    try:
+        minio_client.put_object(
+            bucket_name,
+            file_name,
+            io.BytesIO(photo), 
+            length=len(photo),
+            content_type='image/png'
+            
+        )
+    except S3Error as exc:
+        print("Error occurred:", exc)
+
+# Получение ссылки для доступа к фотографии
+def get_photo_url(file_name):
+    try:
+        url = minio_client.presigned_get_object(bucket_name, file_name)
+        return url
+    except S3Error as exc:
+        print("Error occurred:", exc)
+        return None
+
 def add_table_products(num_rows):
-    car_photo = generate_image()
     # Укажите имя таблицы и её колонки
     table_name = "products"
     columns = "(idproducts, price, name, article, brands_name, models_name, year_model_name, length, photo, width, amount, glass_types_name, glass_options_name)"
+    
+    #вставка URL фото:
+    # Генерация и загрузка в minio фотографии
+    file_name = "products_"+str(1)+".png"
+    upload_photo_to_minio(generate_image(350, 200), file_name)
+    # Получение ссылки из minio
+    photo_url = get_photo_url(file_name)
+    
     # Начинайте вставку данных
     for i in range(num_rows):
         idproducts = i+1
@@ -190,11 +234,14 @@ def add_table_products(num_rows):
         models_name = random.choice(car_models)
         year_model_name = random.choice(year_ranges)
         length = fake.random_int(1, 99999)
-        photo = car_photo#generate_image()
+        photo = photo_url
         width = fake.random_int(1, 99999)
         amount = fake.random_int(1, 99999)
         glass_types_name = random.choice(auto_glass_types)
         glass_options_name = random.choice(glass_options_list)
+        
+
+        
 
         # Создайте SQL-запрос для вставки данных
         insert_query = f"""
@@ -340,11 +387,11 @@ def add_table_year_model(num_rows):
     connection.commit() 
 
 start_time = time.time()
-add_table_brands(num_rows_brands)
-add_table_models(num_rows_models)
-add_table_year_model(num_rows_year_model)
-add_table_glass_types(num_rows_typeproducts)
-add_table_glass_options(num_rows_optionsproducts)
+#add_table_brands(num_rows_brands)
+#add_table_models(num_rows_models)
+#add_table_year_model(num_rows_year_model)
+#add_table_glass_types(num_rows_typeproducts)
+#add_table_glass_options(num_rows_optionsproducts)
 add_table_products(num_rows_products)
 
 
