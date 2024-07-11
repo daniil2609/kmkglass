@@ -17,6 +17,8 @@ services:
       - DB_NAME=kmkglass
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - MINIO_ROOT_USER=root
+      - MINIO_ROOT_PASSWORD=123437123437
 
   mysql:
     image: mysql:8.0

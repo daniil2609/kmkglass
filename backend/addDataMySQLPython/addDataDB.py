@@ -221,8 +221,6 @@ def add_table_products(num_rows):
     # Генерация и загрузка в minio фотографии
     file_name = "products_"+str(1)+".png"
     upload_photo_to_minio(generate_image(350, 200), file_name)
-    # Получение ссылки из minio
-    photo_url = get_photo_url(file_name)
     
     # Начинайте вставку данных
     for i in range(num_rows):
@@ -234,7 +232,7 @@ def add_table_products(num_rows):
         models_name = random.choice(car_models)
         year_model_name = random.choice(year_ranges)
         length = fake.random_int(1, 99999)
-        photo = photo_url
+        photo = file_name
         width = fake.random_int(1, 99999)
         amount = fake.random_int(1, 99999)
         glass_types_name = random.choice(auto_glass_types)

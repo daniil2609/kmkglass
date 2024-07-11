@@ -1,16 +1,19 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"kmkglass/database"
 	"kmkglass/models"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
+	"github.com/minio/minio-go/v7"
 )
 
 func GetProducts(c *gin.Context) {
@@ -50,6 +53,15 @@ func GetProducts(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
+			// Получение ссылки на фотографию
+			reqParams := make(url.Values)
+			presignedURL, err := database.MinioClient.PresignedGetObject(context.Background(), database.BucketName, product.Photo, time.Hour, reqParams)
+			if err != nil {
+				log.Println("Error generating presigned URL:", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			product.Photo = presignedURL.String()
 			products = append(products, product)
 		}
 
@@ -372,6 +384,15 @@ func GetFilterProducts(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
+			// Получение ссылки на фотографию
+			reqParams := make(url.Values)
+			presignedURL, err := database.MinioClient.PresignedGetObject(context.Background(), database.BucketName, product.Photo, time.Hour, reqParams)
+			if err != nil {
+				log.Println("Error generating presigned URL:", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			product.Photo = presignedURL.String()
 			products = append(products, product)
 		}
 
@@ -390,4 +411,112 @@ func GetFilterProducts(c *gin.Context) {
 		c.JSON(http.StatusOK, products)
 		log.Println("Redis Data")
 	}
+}
+
+/*
+func UpdateUser(c *gin.Context) {
+    var input models.User
+    if err := c.ShouldBindJSON(&input); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
+
+    _, err := database.DB.Exec("UPDATE users SET name = ?, email = ? WHERE id = ?", input.Name, input.Email, input.ID)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
+
+    c.JSON(http.StatusOK, input)
+}
+
+func DeleteUser(c *gin.Context) {
+    id := c.Param("id")
+
+    _, err := database.DB.Exec("DELETE FROM users WHERE id = ?", id)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{"message": "User deleted successfully"})
+}
+*/
+
+func CreateProduct(c *gin.Context) {
+	var input models.Product
+	input.Price, _ = strconv.Atoi(c.PostForm("price"))
+	input.Name = c.PostForm("name")
+	input.Article = c.PostForm("article")
+	input.Length, _ = strconv.Atoi(c.PostForm("length"))
+	input.Width, _ = strconv.Atoi(c.PostForm("width"))
+	input.Amount, _ = strconv.Atoi(c.PostForm("amount"))
+	input.Brands_name = c.PostForm("brands_name")
+	input.Models_name = c.PostForm("models_name")
+	input.Year_model_name = c.PostForm("year_model_name")
+	input.Glass_types_name = c.PostForm("glass_types_name")
+	input.Glass_options_name = c.PostForm("glass_options_name")
+
+	if err := c.ShouldBind(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	//получение файла
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file"})
+		return
+	}
+	defer file.Close()
+
+	// Загрузка фотографии в MinIO
+	fileName := header.Filename
+	_, err = database.MinioClient.PutObject(context.Background(), database.BucketName, fileName, file, header.Size, minio.PutObjectOptions{ContentType: "image/png"})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	input.Photo = fileName
+
+	// Сохранение данных в MySQL
+	result, err := database.DB.Exec("INSERT INTO products (price, name, article, length, photo, width, amount, brands_name, models_name, year_model_name, glass_types_name, glass_options_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", input.Price,
+		input.Name,
+		input.Article,
+		input.Length,
+		input.Photo,
+		input.Width,
+		input.Amount,
+		input.Brands_name,
+		input.Models_name,
+		input.Year_model_name,
+		input.Glass_types_name,
+		input.Glass_options_name)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Получение ссылки на фотографию
+	reqParams := make(url.Values)
+	presignedURL, err := database.MinioClient.PresignedGetObject(context.Background(), database.BucketName, fileName, time.Hour, reqParams)
+	if err != nil {
+		log.Println("Error generating presigned URL:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Замена хоста на localhost
+	//presignedURL.Host = "localhost:9000"
+
+	input.Idproducts = int(id)
+	input.Photo = presignedURL.String()
+	c.JSON(http.StatusOK, input)
 }

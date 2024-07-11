@@ -3,13 +3,18 @@ package main
 import (
 	"kmkglass/database"
 	"kmkglass/handlers"
+	"log"
 
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
 	database.InitDB()
+	log.Println("MySQL init")
 	database.InitRedis()
+	log.Println("Redis init")
+	database.InitMinio()
+	log.Println("Minio init")
 
 	r := gin.Default()
 
@@ -20,6 +25,8 @@ func main() {
 	r.GET("/glassoptions", handlers.GetGlassOptionsGlasType)
 	r.GET("/glasstypes", handlers.GetGlassTypes)
 	r.GET("/filterproducts", handlers.GetFilterProducts)
+
+	r.POST("/products", handlers.CreateProduct)
 
 	r.Run(":8080")
 }
