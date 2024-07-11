@@ -1,6 +1,9 @@
 1) docker-compose up --build
 2) запустить все контейнеры
-3) установить requirements.txt в .venv (pip install -r requirements.txt)
+3) установить requirements.txt в .venv (
+                                        1)python -m venv .venv 
+                                        2).\.venv\Scripts\activate 
+                                        3) pip install -r requirements.txt)
 4) запустить файл addDataDB.py (генерация данных)
 
 

@@ -413,36 +413,6 @@ func GetFilterProducts(c *gin.Context) {
 	}
 }
 
-/*
-func UpdateUser(c *gin.Context) {
-    var input models.User
-    if err := c.ShouldBindJSON(&input); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-        return
-    }
-
-    _, err := database.DB.Exec("UPDATE users SET name = ?, email = ? WHERE id = ?", input.Name, input.Email, input.ID)
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-        return
-    }
-
-    c.JSON(http.StatusOK, input)
-}
-
-func DeleteUser(c *gin.Context) {
-    id := c.Param("id")
-
-    _, err := database.DB.Exec("DELETE FROM users WHERE id = ?", id)
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-        return
-    }
-
-    c.JSON(http.StatusOK, gin.H{"message": "User deleted successfully"})
-}
-*/
-
 func CreateProduct(c *gin.Context) {
 	var input models.Product
 	input.Price, _ = strconv.Atoi(c.PostForm("price"))
@@ -477,7 +447,6 @@ func CreateProduct(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
 	input.Photo = fileName
 
 	// Сохранение данных в MySQL
@@ -513,9 +482,7 @@ func CreateProduct(c *gin.Context) {
 		return
 	}
 
-	// Замена хоста на localhost
-	//presignedURL.Host = "localhost:9000"
-
+	//Вывод ответа
 	input.Idproducts = int(id)
 	input.Photo = presignedURL.String()
 	c.JSON(http.StatusOK, input)
